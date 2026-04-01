@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { GatewayNode, OverviewResponse, RouteConfig } from "../api/controlPlane";
 
 interface Log {
@@ -16,12 +17,22 @@ interface OverviewTabProps {
 }
 
 export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: OverviewTabProps) {
+  const logStreamRef = useRef<HTMLDivElement | null>(null);
   const totalRPS = rpsData[rpsData.length - 1] ?? 0;
   const healthyNodes = overview?.onlineNodes ?? nodes.filter((node) => node.status === "ok").length;
   const avgCpu = Math.round(overview?.averageNodeCpu ?? 0);
   const totalRoutes = overview?.totalRoutes ?? routes.length;
   const routeAlerts = Math.max(0, totalRoutes - (overview?.healthyRoutes ?? 0));
   const unhealthyNodes = Math.max(0, nodes.length - healthyNodes);
+
+  useEffect(() => {
+    const logStream = logStreamRef.current;
+    if (!logStream) {
+      return;
+    }
+
+    logStream.scrollTop = logStream.scrollHeight;
+  }, [logs]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-in">
@@ -113,7 +124,7 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
           </div>
         </div>
         <div className="card-body">
-          <div className="log-stream">
+          <div ref={logStreamRef} className="log-stream">
             {logs.slice(-14).map((l, i) => (
               <div key={l.id} className={`log-line ${i === logs.slice(-14).length - 1 ? "log-new" : ""}`}>
                 <span className="log-time">{l.time}</span>

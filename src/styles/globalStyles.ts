@@ -130,7 +130,7 @@ export const CSS = `
   .section-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .section-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 
-  .log-stream { font-size: 10px; line-height: 1.7; max-height: 180px; overflow-y: auto; }
+  .log-stream { font-size: 10px; line-height: 1.7; height: 280px; overflow-y: auto; }
   .log-line { display: flex; gap: 10px; padding: 1px 0; }
   .log-time { color: var(--muted2); flex-shrink: 0; }
   .log-level { flex-shrink: 0; width: 42px; }
