@@ -1,14 +1,4 @@
-import { useState } from "react";
-
-const POLICIES = [
-  { id: 1, name: "Rate Limit — Public Routes",     type: "rate-limit",  target: "/api/v2/products",        status: "active",   priority: 1, rule: "max 2000 req/min per IP" },
-  { id: 2, name: "Auth Enforcement — User APIs",   type: "auth",        target: "/api/v2/users/*",         status: "active",   priority: 2, rule: "require Bearer JWT" },
-  { id: 3, name: "Cache Policy — Catalog",         type: "cache",       target: "/api/v2/products",        status: "active",   priority: 3, rule: "TTL 60s, vary: Accept" },
-  { id: 4, name: "Block Deprecated Endpoints",     type: "block",       target: "/api/v1/*",               status: "active",   priority: 4, rule: "return 410 Gone" },
-  { id: 5, name: "IP Allowlist — Admin Config",    type: "allowlist",   target: "/api/v2/config/runtime",  status: "active",   priority: 5, rule: "allow 10.0.0.0/8 only" },
-  { id: 6, name: "Retry Policy — Order Service",   type: "retry",       target: "/api/v2/orders/*",        status: "degraded", priority: 6, rule: "max 3 retries, backoff 200ms" },
-  { id: 7, name: "Webhook Signature Validation",   type: "auth",        target: "/api/v2/webhooks/*",      status: "inactive", priority: 7, rule: "HMAC-SHA256 header check" },
-];
+import type { PolicyRule } from "../api/controlPlane";
 
 const TYPE_COLORS: Record<string, string> = {
   "rate-limit": "var(--accent)",
@@ -19,16 +9,16 @@ const TYPE_COLORS: Record<string, string> = {
   "retry":      "var(--accent2)",
 };
 
-export default function PoliciesTab() {
-  const [policies, setPolicies] = useState(POLICIES);
+interface PoliciesTabProps {
+  policies: PolicyRule[];
+}
 
-  const toggleStatus = (id: number) => {
-    setPolicies(p => p.map(x =>
-      x.id === id
-        ? { ...x, status: x.status === "active" ? "inactive" : "active" }
-        : x
-    ));
-  };
+function getPolicyStatus(policy: PolicyRule) {
+  return policy.enabled ? "active" : "inactive";
+}
+
+export default function PoliciesTab({ policies }: PoliciesTabProps) {
+  const activePolicies = policies.filter((policy) => policy.enabled);
 
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -43,23 +33,23 @@ export default function PoliciesTab() {
         <div className="stat-card ok">
           <div className="stat-label">Active</div>
           <div className="stat-value" style={{ color: "var(--ok)" }}>
-            {policies.filter(p => p.status === "active").length}
+            {activePolicies.length}
           </div>
           <div className="stat-sub">enforced at runtime</div>
         </div>
         <div className="stat-card warn">
-          <div className="stat-label">Degraded</div>
+          <div className="stat-label">Disabled</div>
           <div className="stat-value" style={{ color: "var(--warn)" }}>
-            {policies.filter(p => p.status === "degraded").length}
+            {policies.length - activePolicies.length}
           </div>
-          <div className="stat-sub">partial enforcement</div>
+          <div className="stat-sub">not pushed to runtime</div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-label">Inactive</div>
+          <div className="stat-label">Scopes</div>
           <div className="stat-value" style={{ color: "#A78BFA" }}>
-            {policies.filter(p => p.status === "inactive").length}
+            {new Set(policies.map((policy) => policy.scope)).size}
           </div>
-          <div className="stat-sub">disabled / draft</div>
+          <div className="stat-sub">targeting dimensions</div>
         </div>
       </div>
 
@@ -78,9 +68,10 @@ export default function PoliciesTab() {
               <tr>
                 <th>Priority</th>
                 <th>Policy Name</th>
-                <th>Type</th>
+                <th>Scope</th>
                 <th>Target Route</th>
-                <th>Rule</th>
+                <th>Condition</th>
+                <th>Action</th>
                 <th>Status</th>
                 <th>Enabled</th>
                 <th></th>
@@ -94,24 +85,22 @@ export default function PoliciesTab() {
                   <td>
                     <span style={{
                       fontSize: 9, padding: "2px 7px", borderRadius: 2, fontWeight: 600,
-                      letterSpacing: 0.5, border: `1px solid ${TYPE_COLORS[p.type]}40`,
-                      background: `${TYPE_COLORS[p.type]}15`, color: TYPE_COLORS[p.type]
+                      letterSpacing: 0.5, border: `1px solid ${(TYPE_COLORS[p.scope] ?? "var(--accent)") }40`,
+                      background: `${TYPE_COLORS[p.scope] ?? "var(--accent)"}15`, color: TYPE_COLORS[p.scope] ?? "var(--accent)"
                     }}>
-                      {p.type}
+                      {p.scope}
                     </span>
                   </td>
-                  <td><code className="code-tag">{p.target}</code></td>
-                  <td style={{ fontSize: 10, color: "var(--muted)" }}>{p.rule}</td>
+                  <td><code className="code-tag">{p.routePattern}</code></td>
+                  <td style={{ fontSize: 10, color: "var(--muted)" }}>{p.conditionExpression}</td>
+                  <td style={{ fontSize: 10, color: "var(--text)" }}>{p.action}</td>
                   <td>
-                    <span className={`status-badge ${p.status === "active" ? "healthy" : p.status === "degraded" ? "degraded" : "down"}`}>
-                      {p.status}
+                    <span className={`status-badge ${p.enabled ? "healthy" : "down"}`}>
+                      {getPolicyStatus(p)}
                     </span>
                   </td>
                   <td>
-                    <div
-                      className={`toggle ${p.status === "active" ? "on" : ""}`}
-                      onClick={() => toggleStatus(p.id)}
-                    />
+                    <div className={`toggle ${p.enabled ? "on" : ""}`} />
                   </td>
                   <td>
                     <div className="flex gap-6">

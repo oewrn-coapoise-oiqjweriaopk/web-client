@@ -1,5 +1,4 @@
-import { ROUTES, NODES } from "../data/mockData";
-import Sparkline from "../components/shared/Sparkline";
+import type { GatewayNode, OverviewResponse, RouteConfig } from "../api/controlPlane";
 
 interface Log {
   id: number;
@@ -11,15 +10,18 @@ interface Log {
 interface OverviewTabProps {
   logs: Log[];
   rpsData: number[];
+  overview: OverviewResponse | null;
+  routes: RouteConfig[];
+  nodes: GatewayNode[];
 }
 
-export default function OverviewTab({ logs, rpsData }: OverviewTabProps) {
-  const totalRPS = ROUTES.reduce((a, r) => a + r.rps, 0);
-  const healthyNodes = NODES.filter(n => n.status === "ok").length;
-  const avgLatency = Math.round(
-    ROUTES.filter(r => r.latency > 0).reduce((a, r) => a + r.latency, 0) /
-    ROUTES.filter(r => r.latency > 0).length
-  );
+export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: OverviewTabProps) {
+  const totalRPS = rpsData[rpsData.length - 1] ?? 0;
+  const healthyNodes = overview?.onlineNodes ?? nodes.filter((node) => node.status === "ok").length;
+  const avgCpu = Math.round(overview?.averageNodeCpu ?? 0);
+  const totalRoutes = overview?.totalRoutes ?? routes.length;
+  const routeAlerts = Math.max(0, totalRoutes - (overview?.healthyRoutes ?? 0));
+  const unhealthyNodes = Math.max(0, nodes.length - healthyNodes);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-in">
@@ -31,19 +33,21 @@ export default function OverviewTab({ logs, rpsData }: OverviewTabProps) {
           <div className="stat-delta up">▲ 8.2% vs 1h ago</div>
         </div>
         <div className="stat-card ok">
-          <div className="stat-label">Avg Latency</div>
-          <div className="stat-value" style={{ color: "var(--ok)" }}>{avgLatency}<span style={{ fontSize: 14, color: "var(--muted)" }}>ms</span></div>
-          <div className="stat-delta up">▼ 3ms improvement</div>
+          <div className="stat-label">Avg Node CPU</div>
+          <div className="stat-value" style={{ color: "var(--ok)" }}>{avgCpu}<span style={{ fontSize: 14, color: "var(--muted)" }}>%</span></div>
+          <div className="stat-delta up">control-plane reported</div>
         </div>
         <div className="stat-card warn">
           <div className="stat-label">Active Nodes</div>
-          <div className="stat-value" style={{ color: "var(--warn)" }}>{healthyNodes}<span style={{ fontSize: 14, color: "var(--muted)" }}>/{NODES.length}</span></div>
-          <div className="stat-delta down">1 node unreachable</div>
+          <div className="stat-value" style={{ color: "var(--warn)" }}>{healthyNodes}<span style={{ fontSize: 14, color: "var(--muted)" }}>/{nodes.length}</span></div>
+          <div className="stat-delta down">{unhealthyNodes} node{unhealthyNodes === 1 ? "" : "s"} need attention</div>
         </div>
         <div className="stat-card purple">
           <div className="stat-label">Active Routes</div>
-          <div className="stat-value" style={{ color: "#A78BFA" }}>{ROUTES.length}<span style={{ fontSize: 14, color: "var(--muted)" }}> cfg</span></div>
-          <div className="stat-delta down" style={{ color: "var(--error)" }}>1 route down</div>
+          <div className="stat-value" style={{ color: "#A78BFA" }}>{totalRoutes}<span style={{ fontSize: 14, color: "var(--muted)" }}> cfg</span></div>
+          <div className="stat-delta down" style={{ color: routeAlerts > 0 ? "var(--error)" : "var(--ok)" }}>
+            {routeAlerts} route{routeAlerts === 1 ? "" : "s"} degraded
+          </div>
         </div>
       </div>
 
@@ -75,21 +79,21 @@ export default function OverviewTab({ logs, rpsData }: OverviewTabProps) {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Node Mesh</span>
-            <span className="text-muted">{NODES.filter(n=>n.status==="ok").length} healthy</span>
+            <span className="text-muted">{healthyNodes} healthy</span>
           </div>
           <div className="card-body">
             <div className="node-grid">
-              {NODES.map(n => (
-                <div key={n.id} className={`node-chip ${n.status}`}>
+              {nodes.map(n => (
+                <div key={n.nodeId} className={`node-chip ${n.status}`}>
                   <div className={`dot ${n.status === "ok" ? "" : n.status}`} />
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 10 }}>{n.id}</div>
+                    <div style={{ fontWeight: 600, fontSize: 10 }}>{n.nodeId}</div>
                     <div style={{ color: "var(--muted)", fontSize: 9 }}>{n.region}</div>
                   </div>
                   {n.status !== "error" && (
                     <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                      <div style={{ fontSize: 9, color: n.cpu > 60 ? "var(--warn)" : "var(--muted)" }}>CPU {n.cpu}%</div>
-                      <div style={{ fontSize: 9, color: "var(--muted)" }}>{n.conns.toLocaleString()} conn</div>
+                      <div style={{ fontSize: 9, color: n.cpuUsage > 60 ? "var(--warn)" : "var(--muted)" }}>CPU {n.cpuUsage}%</div>
+                      <div style={{ fontSize: 9, color: "var(--muted)" }}>{n.activeConnections.toLocaleString()} conn</div>
                     </div>
                   )}
                 </div>
@@ -105,7 +109,7 @@ export default function OverviewTab({ logs, rpsData }: OverviewTabProps) {
           <span className="card-title">Live Log Stream</span>
           <div className="flex items-center gap-6">
             <span className="ws-blink" style={{ fontSize: 9, color: "var(--ok)" }}>● LIVE</span>
-            <span className="text-muted">WebSocket /api/v2/metrics/stream</span>
+            <span className="text-muted">control-plane activity stream</span>
           </div>
         </div>
         <div className="card-body">

@@ -1,11 +1,16 @@
-import { USERS } from "../data/mockData";
+import type { AdminUser } from "../api/controlPlane";
+import { formatRelativeTime } from "../lib/formatters";
 
-export default function UsersTab() {
+interface UsersTabProps {
+  users: AdminUser[];
+}
+
+export default function UsersTab({ users }: UsersTabProps) {
   return (
     <div className="fade-in">
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Access Control — {USERS.length} users</span>
+          <span className="card-title">Access Control — {users.length} users</span>
           <div className="flex gap-6">
             <button className="btn btn-ghost">Audit Log</button>
             <button className="btn btn-primary">+ Invite User</button>
@@ -18,7 +23,7 @@ export default function UsersTab() {
             </tr>
           </thead>
           <tbody>
-            {USERS.map(u => (
+            {users.map(u => (
               <tr key={u.id}>
                 <td>
                   <div className="flex items-center gap-8">
@@ -36,11 +41,11 @@ export default function UsersTab() {
                 <td style={{ color: "var(--muted)", fontSize: 10 }}>{u.email}</td>
                 <td><span className={`role-pill ${u.role}`}>{u.role}</span></td>
                 <td>
-                  <span style={{ fontSize: 10, color: u.mfa ? "var(--ok)" : "var(--error)" }}>
-                    {u.mfa ? "✓ enabled" : "✗ off"}
+                  <span style={{ fontSize: 10, color: u.mfaEnabled ? "var(--ok)" : "var(--error)" }}>
+                    {u.mfaEnabled ? "✓ enabled" : "✗ off"}
                   </span>
                 </td>
-                <td style={{ color: "var(--muted)", fontSize: 10 }}>{u.lastSeen}</td>
+                <td style={{ color: "var(--muted)", fontSize: 10 }}>{formatRelativeTime(u.lastSeenAt)}</td>
                 <td>
                   <div className="flex gap-6" style={{ flexWrap: "wrap" }}>
                     {["read", ...(u.role !== "readonly" ? ["write", "configure"] : []), ...(u.role === "admin" ? ["delete"] : [])].map(p => (

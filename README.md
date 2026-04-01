@@ -1,3 +1,36 @@
+# Gateway Control Plane Web
+
+Frontend for the API gateway control plane.
+
+## Development
+
+Point the app at the Spring Boot backend:
+
+```bash
+cp .env.example .env
+```
+
+Default value:
+
+```bash
+VITE_CONTROL_PLANE_BASE_URL=http://localhost:8081
+```
+
+Then run:
+
+```bash
+npm install
+npm run dev
+```
+
+The UI polls these endpoints from the control plane:
+
+- `GET /api/v1/overview`
+- `GET /api/v1/routes`
+- `GET /api/v1/policies`
+- `GET /api/v1/users`
+- `GET /api/v1/nodes`
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

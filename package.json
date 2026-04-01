@@ -1,5 +1,5 @@
 {
-  "name": "middleware-frontend",
+  "name": "gateway-control-plane-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",

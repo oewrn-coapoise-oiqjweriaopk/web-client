@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CSS } from "./styles/globalStyles";
-import { INIT_LOGS, LOG_POOL, NODES, ROUTES } from "./data/mockData";
+import { fetchControlPlaneSnapshot, type GatewayNode, type OverviewResponse, type PolicyRule, type RouteConfig, type AdminUser } from "./api/controlPlane";
+import { INIT_LOGS, LOG_POOL } from "./data/mockData";
 import Topbar from "./components/layout/Topbar";
 import Sidebar from "./components/layout/Sidebar";
 import OverviewTab from "./tabs/OverviewTab";
@@ -21,11 +22,56 @@ const nav = [
 export default function App() {
   const [tab, setTab] = useState("overview");
   const [logs, setLogs] = useState(INIT_LOGS);
+  const [overview, setOverview] = useState<OverviewResponse | null>(null);
+  const [routes, setRoutes] = useState<RouteConfig[]>([]);
+  const [policies, setPolicies] = useState<PolicyRule[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [nodes, setNodes] = useState<GatewayNode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [rpsData, setRpsData] = useState(() =>
     Array.from({ length: 30 }, () => 1200 + Math.floor(Math.random() * 400))
   );
-  const [wsConnected] = useState(true);
+  const [wsConnected, setWsConnected] = useState(true);
   const logIdRef = useRef(100);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSnapshot() {
+      try {
+        const snapshot = await fetchControlPlaneSnapshot();
+        if (cancelled) {
+          return;
+        }
+        setOverview(snapshot.overview);
+        setRoutes(snapshot.routes);
+        setPolicies(snapshot.policies);
+        setUsers(snapshot.users);
+        setNodes(snapshot.nodes);
+        setError(null);
+        setWsConnected(true);
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+        setError(loadError instanceof Error ? loadError.message : "Failed to load control-plane data");
+        setWsConnected(false);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadSnapshot();
+    const pollId = setInterval(loadSnapshot, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollId);
+    };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -44,9 +90,17 @@ export default function App() {
     <>
       <style>{CSS}</style>
       <div className="shell">
-        <Topbar />
+        <Topbar overview={overview} routes={routes} nodes={nodes} />
         <div className="body">
-          <Sidebar tab={tab} setTab={setTab} wsConnected={wsConnected} />
+          <Sidebar
+            tab={tab}
+            setTab={setTab}
+            wsConnected={wsConnected}
+            overview={overview}
+            routes={routes}
+            nodes={nodes}
+            users={users}
+          />
           <div className="main">
 
             {/* Breadcrumb */}
@@ -59,20 +113,34 @@ export default function App() {
               {tab === "arch"     && <span className="text-muted" style={{ marginLeft: 4 }}>— control plane / data plane separation</span>}
             </div>
 
-            {tab === "overview"  && <OverviewTab logs={logs} rpsData={rpsData} />}
-            {tab === "routes"    && <RoutesTab />}
-            {tab === "policies"  && <PoliciesTab />}
+            {error && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-body" style={{ color: "var(--error)" }}>
+                  Control plane unavailable: {error}
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="card-body">Syncing control-plane data...</div>
+              </div>
+            )}
+
+            {tab === "overview"  && <OverviewTab logs={logs} rpsData={rpsData} overview={overview} routes={routes} nodes={nodes} />}
+            {tab === "routes"    && <RoutesTab routes={routes} />}
+            {tab === "policies"  && <PoliciesTab policies={policies} />}
             {tab === "arch"      && <ArchitectureTab />}
-            {tab === "users"     && <UsersTab />}
+            {tab === "users"     && <UsersTab users={users} />}
 
             {tab === "nodes" && (
               <div className="fade-in">
                 <div className="stat-grid">
-                  {NODES.map(n => (
-                    <div key={n.id} className={`stat-card ${n.status === "ok" ? "ok" : n.status === "warn" ? "warn" : "accent"}`}>
+                  {nodes.map(n => (
+                    <div key={n.nodeId} className={`stat-card ${n.status === "ok" ? "ok" : n.status === "warn" ? "warn" : "accent"}`}>
                       <div className="stat-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <div className={`dot ${n.status === "ok" ? "" : n.status}`} />
-                        {n.id} — {n.region}
+                        {n.nodeId} — {n.region}
                       </div>
                       {n.status !== "error" ? (
                         <>
@@ -80,19 +148,19 @@ export default function App() {
                             <div>
                               <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 3 }}>CPU</div>
                               <div className="progress">
-                                <div className={`progress-fill ${n.cpu > 60 ? "warn" : "ok"}`} style={{ width: `${n.cpu}%` }} />
+                                <div className={`progress-fill ${n.cpuUsage > 60 ? "warn" : "ok"}`} style={{ width: `${n.cpuUsage}%` }} />
                               </div>
-                              <div style={{ fontSize: 10, marginTop: 3 }}>{n.cpu}%</div>
+                              <div style={{ fontSize: 10, marginTop: 3 }}>{n.cpuUsage}%</div>
                             </div>
                             <div>
                               <div style={{ fontSize: 9, color: "var(--muted)", marginBottom: 3 }}>MEM</div>
                               <div className="progress">
-                                <div className={`progress-fill ${n.mem > 70 ? "warn" : "accent"}`} style={{ width: `${n.mem}%` }} />
+                                <div className={`progress-fill ${n.memoryUsage > 70 ? "warn" : "accent"}`} style={{ width: `${n.memoryUsage}%` }} />
                               </div>
-                              <div style={{ fontSize: 10, marginTop: 3 }}>{n.mem}%</div>
+                              <div style={{ fontSize: 10, marginTop: 3 }}>{n.memoryUsage}%</div>
                             </div>
                           </div>
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>{n.conns.toLocaleString()} connections</div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>{n.activeConnections.toLocaleString()} connections</div>
                         </>
                       ) : (
                         <div style={{ marginTop: 12, fontSize: 11, color: "var(--error)" }}>NODE UNREACHABLE</div>
