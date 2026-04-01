@@ -29,7 +29,7 @@ export default function UsersTab({ users }: UsersTabProps) {
                   <div className="flex items-center gap-8">
                     <div style={{
                       width: 24, height: 24, borderRadius: "50%",
-                      background: u.role === "admin" ? "var(--accent3)" : u.role === "ops" ? "rgba(0,229,255,0.2)" : "var(--border2)",
+                      background: u.role === "admin" ? "var(--accent3)" : u.role === "ops" ? "rgba(196,167,231,0.2)" : "var(--border2)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: 9, color: "#fff", flexShrink: 0
                     }}>

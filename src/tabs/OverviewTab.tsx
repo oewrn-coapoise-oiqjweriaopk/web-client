@@ -44,7 +44,7 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
         </div>
         <div className="stat-card purple">
           <div className="stat-label">Active Routes</div>
-          <div className="stat-value" style={{ color: "#A78BFA" }}>{totalRoutes}<span style={{ fontSize: 14, color: "var(--muted)" }}> cfg</span></div>
+          <div className="stat-value" style={{ color: "var(--accent3)" }}>{totalRoutes}<span style={{ fontSize: 14, color: "var(--muted)" }}> cfg</span></div>
           <div className="stat-delta down" style={{ color: routeAlerts > 0 ? "var(--error)" : "var(--ok)" }}>
             {routeAlerts} route{routeAlerts === 1 ? "" : "s"} degraded
           </div>

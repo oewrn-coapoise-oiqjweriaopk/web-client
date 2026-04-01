@@ -39,7 +39,7 @@ export default function RoutesTab({ routes }: RoutesTabProps) {
                     <div className="flex items-center gap-6">
                       <Sparkline
                         data={Array.from({ length: 8 }, (_, index) => Math.max(200, r.timeoutMillis - 200 + index * 35))}
-                        color={r.timeoutMillis > 3000 ? "#EF4444" : "#00E5FF"}
+                        color={r.timeoutMillis > 3000 ? "#eb6f92" : "#c4a7e7"}
                       />
                       <span style={{ fontSize: 10, color: r.timeoutMillis > 3000 ? "var(--error)" : "var(--text)" }}>{r.timeoutMillis}ms</span>
                     </div>

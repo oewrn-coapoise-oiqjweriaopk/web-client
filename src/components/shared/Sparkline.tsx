@@ -5,7 +5,7 @@ interface SparklineProps {
   h?: number;
 }
 
-export default function Sparkline({ data, color = "#00E5FF", w = 60, h = 20 }: SparklineProps) {
+export default function Sparkline({ data, color = "#c4a7e7", w = 60, h = 20 }: SparklineProps) {
   const max = Math.max(...data, 1);
   const pts = data.map((v, i) => {
     const x = (i / (data.length - 1)) * w;

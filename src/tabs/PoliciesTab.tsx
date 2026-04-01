@@ -3,7 +3,7 @@ import type { PolicyRule } from "../api/controlPlane";
 const TYPE_COLORS: Record<string, string> = {
   "rate-limit": "var(--accent)",
   "auth":       "var(--ok)",
-  "cache":      "#A78BFA",
+  "cache":      "var(--accent3)",
   "block":      "var(--error)",
   "allowlist":  "var(--warn)",
   "retry":      "var(--accent2)",
@@ -150,7 +150,7 @@ export default function PoliciesTab({ policies }: PoliciesTabProps) {
             {[
               { label: "Request Ingress",    sub: "Client request hits gateway entry point",   color: "var(--accent)"  },
               { label: "Policy Evaluation",  sub: "Auth → Rate Limit → IP Rules → Cache",      color: "var(--ok)"      },
-              { label: "Route Resolution",   sub: "Match rule → resolve upstream target",       color: "#A78BFA"        },
+              { label: "Route Resolution",   sub: "Match rule → resolve upstream target",       color: "var(--accent3)" },
               { label: "Upstream Proxy",     sub: "Forward to microservice, apply transforms",  color: "var(--warn)"    },
               { label: "Response Return",    sub: "Cache write → log → return to client",       color: "var(--accent2)" },
             ].map((item, i, arr) => (
