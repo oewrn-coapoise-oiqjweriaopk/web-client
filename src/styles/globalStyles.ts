@@ -118,6 +118,12 @@ export const CSS = `
   .bar { flex: 1; background: var(--accent); opacity: 0.4; border-radius: 1px 1px 0 0; transition: opacity 0.2s; }
   .bar:hover { opacity: 1; }
   .bar.error-bar { background: var(--error); }
+  .bar-window { height: 80px; overflow: hidden; position: relative; }
+  .rps-chart { width: 100%; height: 100%; display: block; overflow: visible; }
+  .rps-chart-track { transition: transform 0s; will-change: transform; }
+  .rps-chart-track.sliding { transition: transform 0.32s ease; }
+  .rps-bar { fill: var(--border2); transition: fill 0.2s ease; }
+  .rps-bar.latest { fill: var(--accent); }
 
   .route-path { font-family: var(--mono); font-size: 11px; color: var(--accent); }
   .route-path span { color: var(--muted); }

@@ -28,50 +28,61 @@ export default function App() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [nodes, setNodes] = useState<GatewayNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rpsData, setRpsData] = useState(() =>
-    Array.from({ length: 30 }, () => 1200 + Math.floor(Math.random() * 400))
+    Array.from({ length: 31 }, () => 1200 + Math.floor(Math.random() * 400))
   );
   const [wsConnected, setWsConnected] = useState(true);
   const logIdRef = useRef(100);
 
+  async function loadSnapshot(cancelled = false) {
+    try {
+      const snapshot = await fetchControlPlaneSnapshot();
+      if (cancelled) {
+        return;
+      }
+      setOverview(snapshot.overview);
+      setRoutes(snapshot.routes);
+      setPolicies(snapshot.policies);
+      setUsers(snapshot.users);
+      setNodes(snapshot.nodes);
+      setError(null);
+      setWsConnected(true);
+    } catch (loadError) {
+      if (cancelled) {
+        return;
+      }
+      setError(loadError instanceof Error ? loadError.message : "Failed to load control-plane data");
+      setWsConnected(false);
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+        setRetrying(false);
+      }
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSnapshot() {
-      try {
-        const snapshot = await fetchControlPlaneSnapshot();
-        if (cancelled) {
-          return;
-        }
-        setOverview(snapshot.overview);
-        setRoutes(snapshot.routes);
-        setPolicies(snapshot.policies);
-        setUsers(snapshot.users);
-        setNodes(snapshot.nodes);
-        setError(null);
-        setWsConnected(true);
-      } catch (loadError) {
-        if (cancelled) {
-          return;
-        }
-        setError(loadError instanceof Error ? loadError.message : "Failed to load control-plane data");
-        setWsConnected(false);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadSnapshot();
-    const pollId = setInterval(loadSnapshot, 15000);
+    void loadSnapshot(cancelled);
+    const pollId = setInterval(() => {
+      void loadSnapshot(cancelled);
+    }, 15000);
 
     return () => {
       cancelled = true;
       clearInterval(pollId);
     };
   }, []);
+
+  function handleRetry() {
+    setRetrying(true);
+    setLoading(true);
+    setError(null);
+    void loadSnapshot();
+  }
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -81,7 +92,7 @@ export default function App() {
       const s = String(now.getSeconds()).padStart(2, "0");
       const entry = LOG_POOL[Math.floor(Math.random() * LOG_POOL.length)];
       setLogs(prev => [...prev.slice(-40), { ...entry, id: logIdRef.current++, time: `${h}:${m}:${s}` }]);
-      setRpsData(prev => [...prev.slice(-29), 1100 + Math.floor(Math.random() * 500)]);
+      setRpsData(prev => [...prev.slice(-30), 1100 + Math.floor(Math.random() * 500)]);
     }, 1800);
     return () => clearInterval(id);
   }, []);
@@ -115,8 +126,19 @@ export default function App() {
 
             {error && (
               <div className="card" style={{ marginBottom: 16 }}>
-                <div className="card-body" style={{ color: "var(--error)" }}>
-                  Control plane unavailable: {error}
+                <div
+                  className="card-body"
+                  style={{ color: "var(--error)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span>Control plane unavailable: {error}</span>
+                  <button
+                    className="btn btn-primary"
+                    style={{ borderRadius: 0, flexShrink: 0 }}
+                    onClick={handleRetry}
+                    disabled={retrying}
+                  >
+                    {retrying ? "Retrying..." : "Retry"}
+                  </button>
                 </div>
               </div>
             )}

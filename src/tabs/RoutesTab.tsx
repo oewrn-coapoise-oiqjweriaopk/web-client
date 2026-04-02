@@ -25,6 +25,7 @@ export default function RoutesTab({ routes }: RoutesTabProps) {
                 <th>Auth</th><th>Cache</th><th>Status</th><th>Timeout</th><th>Strip Prefix</th><th></th>
               </tr>
             </thead>
+            
             <tbody>
               {routes.map(r => (
                 <tr key={r.id}>

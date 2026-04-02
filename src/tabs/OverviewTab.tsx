@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GatewayNode, OverviewResponse, RouteConfig } from "../api/controlPlane";
 
 interface Log {
@@ -16,8 +16,28 @@ interface OverviewTabProps {
   nodes: GatewayNode[];
 }
 
+interface ChartBar {
+  id: number;
+  value: number;
+}
+
+const VISIBLE_RPS_BARS = 30;
+const CHART_BAR_WIDTH = 9;
+const CHART_BAR_GAP = 1;
+const CHART_SLOT_WIDTH = CHART_BAR_WIDTH + CHART_BAR_GAP;
+const CHART_HEIGHT = 80;
+const CHART_WIDTH = VISIBLE_RPS_BARS * CHART_SLOT_WIDTH - CHART_BAR_GAP;
+
 export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: OverviewTabProps) {
   const logStreamRef = useRef<HTMLDivElement | null>(null);
+  const chartAnimationRef = useRef<number | null>(null);
+  const chartFrameRef = useRef<number | null>(null);
+  const nextChartBarIdRef = useRef(rpsData.length);
+  const [chartBars, setChartBars] = useState<ChartBar[]>(() =>
+    rpsData.slice(-VISIBLE_RPS_BARS).map((value, index) => ({ id: index, value })),
+  );
+  const [transitionBars, setTransitionBars] = useState<ChartBar[] | null>(null);
+  const [chartSlidePhase, setChartSlidePhase] = useState<"idle" | "primed" | "sliding">("idle");
   const totalRPS = rpsData[rpsData.length - 1] ?? 0;
   const healthyNodes = overview?.onlineNodes ?? nodes.filter((node) => node.status === "ok").length;
   const avgCpu = Math.round(overview?.averageNodeCpu ?? 0);
@@ -33,6 +53,76 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
 
     logStream.scrollTop = logStream.scrollHeight;
   }, [logs]);
+
+  useEffect(() => {
+    if (chartSlidePhase !== "idle") {
+      return;
+    }
+
+    const nextVisibleValues = rpsData.slice(-VISIBLE_RPS_BARS);
+    const previousValues = chartBars.map((bar) => bar.value);
+    const sameSeries =
+      previousValues.length === nextVisibleValues.length
+      && previousValues.every((value, index) => value === nextVisibleValues[index]);
+
+    if (sameSeries) {
+      return;
+    }
+
+    if (chartAnimationRef.current !== null) {
+      window.clearTimeout(chartAnimationRef.current);
+      chartAnimationRef.current = null;
+    }
+
+    if (chartFrameRef.current !== null) {
+      window.cancelAnimationFrame(chartFrameRef.current);
+      chartFrameRef.current = null;
+    }
+
+    if (chartBars.length === 0 || nextVisibleValues.length <= 1) {
+      setChartBars(nextVisibleValues.map((value) => ({ id: nextChartBarIdRef.current++, value })));
+      setTransitionBars(null);
+      setChartSlidePhase("idle");
+      return;
+    }
+
+    const incomingBar = { id: nextChartBarIdRef.current++, value: nextVisibleValues[nextVisibleValues.length - 1] };
+    const nextTransitionBars = [...chartBars, incomingBar];
+    const nextStableBars = [...chartBars.slice(1), incomingBar];
+
+    setTransitionBars(nextTransitionBars);
+    setChartSlidePhase("primed");
+
+    chartFrameRef.current = window.requestAnimationFrame(() => {
+      chartFrameRef.current = window.requestAnimationFrame(() => {
+        setChartSlidePhase("sliding");
+        chartFrameRef.current = null;
+      });
+    });
+
+    chartAnimationRef.current = window.setTimeout(() => {
+      setChartBars(nextStableBars);
+      setTransitionBars(null);
+      setChartSlidePhase("idle");
+      chartAnimationRef.current = null;
+    }, 320);
+  }, [chartBars, chartSlidePhase, rpsData]);
+
+  useEffect(() => () => {
+    if (chartAnimationRef.current !== null) {
+      window.clearTimeout(chartAnimationRef.current);
+    }
+
+    if (chartFrameRef.current !== null) {
+      window.cancelAnimationFrame(chartFrameRef.current);
+    }
+  }, []);
+
+  const renderedBars = transitionBars ?? chartBars;
+  const chartMax = Math.max(
+    ...renderedBars.map((bar) => bar.value),
+    1,
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }} className="fade-in">
@@ -70,19 +160,42 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
             <span className="text-muted">{rpsData[rpsData.length-1]} RPS</span>
           </div>
           <div className="card-body">
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 80 }}>
-              {rpsData.map((v, i) => {
-                const max = Math.max(...rpsData, 1);
-                return (
-                  <div key={i} style={{
-                    flex: 1,
-                    height: `${Math.max(8, (v / max) * 100)}%`,
-                    background: i === rpsData.length - 1 ? "var(--accent)" : "var(--border2)",
-                    borderRadius: "2px 2px 0 0",
-                    transition: "height 0.3s",
-                  }} />
-                );
-              })}
+            <div className="bar-window">
+              <svg
+                className="rps-chart"
+                viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+                preserveAspectRatio="none"
+                aria-label="Request volume chart"
+              >
+                <g
+                  className={`rps-chart-track ${chartSlidePhase === "sliding" ? "sliding" : ""}`}
+                  style={{
+                    transform: chartSlidePhase === "sliding"
+                      ? `translateX(-${CHART_SLOT_WIDTH}px)`
+                      : "translateX(0px)",
+                  }}
+                >
+                  {renderedBars.map((bar, i) => {
+                    const barHeight = Math.max(8, (bar.value / chartMax) * CHART_HEIGHT);
+                    const x = i * CHART_SLOT_WIDTH;
+                    const y = CHART_HEIGHT - barHeight;
+                    const isLatestStableBar = chartSlidePhase === "idle" && i === renderedBars.length - 1;
+
+                    return (
+                      <rect
+                        key={bar.id}
+                        x={x}
+                        y={y}
+                        width={CHART_BAR_WIDTH}
+                        height={barHeight}
+                        rx={2}
+                        ry={2}
+                        className={isLatestStableBar ? "rps-bar latest" : "rps-bar"}
+                      />
+                    );
+                  })}
+                </g>
+              </svg>
             </div>
           </div>
         </div>
