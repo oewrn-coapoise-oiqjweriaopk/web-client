@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { GatewayNode, OverviewResponse, RouteConfig } from "../api/controlPlane";
-
-interface Log {
-  id: number;
-  time: string;
-  level: string;
-  msg: string;
-}
+import type { GatewayNode, LogEntry, OverviewResponse, RouteConfig } from "../api/controlPlane";
 
 interface OverviewTabProps {
-  logs: Log[];
+  logs: LogEntry[];
   rpsData: number[];
   overview: OverviewResponse | null;
   routes: RouteConfig[];
@@ -238,13 +231,23 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
         </div>
         <div className="card-body">
           <div ref={logStreamRef} className="log-stream">
-            {logs.slice(-14).map((l, i) => (
-              <div key={l.id} className={`log-line ${i === logs.slice(-14).length - 1 ? "log-new" : ""}`}>
-                <span className="log-time">{l.time}</span>
-                <span className={`log-level ${l.level}`}>{l.level}</span>
-                <span className="log-msg">{l.msg}</span>
-              </div>
-            ))}
+            {logs.slice(-14).map((l, i) => {
+              // Format timestamp from ISO string
+              const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('en-US', { 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+              }) : '';
+              
+              return (
+                <div key={l.id} className={`log-line ${i === logs.slice(-14).length - 1 ? "log-new" : ""}`}>
+                  <span className="log-time">{time}</span>
+                  <span className={`log-level ${l.level.toLowerCase()}`}>{l.level}</span>
+                  <span className="log-msg">{l.message}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

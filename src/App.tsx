@@ -1,7 +1,24 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { CSS } from "./styles/globalStyles";
-import { fetchControlPlaneSnapshot, type GatewayNode, type OverviewResponse, type PolicyRule, type RouteConfig, type AdminUser } from "./api/controlPlane";
-import { INIT_LOGS, LOG_POOL } from "./data/mockData";
+import {
+  createPolicy,
+  createRoute,
+  deletePolicy,
+  deleteRoute,
+  fetchControlPlaneSnapshot,
+  fetchMetrics,
+  updatePolicy,
+  updateRoute,
+  type AdminUser,
+  type GatewayNode,
+  type LogEntry,
+  type MetricsResponse,
+  type OverviewResponse,
+  type PolicyRule,
+  type PolicyRuleRequest,
+  type RouteConfig,
+  type RouteRequest,
+} from "./api/controlPlane";
 import Topbar from "./components/layout/Topbar";
 import Sidebar from "./components/layout/Sidebar";
 import OverviewTab from "./tabs/OverviewTab";
@@ -19,34 +36,83 @@ const nav = [
   { id: "users",     label: "Users & RBAC"  },
 ];
 
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function mergeNodesWithMetrics(nodes: GatewayNode[], metrics: MetricsResponse[]): GatewayNode[] {
+  if (metrics.length === 0) {
+    return nodes;
+  }
+
+  const nodesById = new Map(nodes.map((node) => [node.nodeId, node]));
+  return metrics.map((metric, index) => {
+    const existingNode = nodesById.get(metric.nodeId);
+    return {
+      id: existingNode?.id ?? -(index + 1),
+      nodeId: metric.nodeId,
+      region: existingNode?.region ?? "runtime",
+      status: "ok",
+      cpuUsage: clampPercent(metric.cpuUsagePercent),
+      memoryUsage: existingNode?.memoryUsage ?? 0,
+      activeConnections: existingNode?.activeConnections ?? 0,
+      lastHeartbeatAt: new Date(metric.lastUpdated).toISOString(),
+    };
+  });
+}
+
 export default function App() {
   const [tab, setTab] = useState("overview");
-  const [logs, setLogs] = useState(INIT_LOGS);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [routes, setRoutes] = useState<RouteConfig[]>([]);
   const [policies, setPolicies] = useState<PolicyRule[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [nodes, setNodes] = useState<GatewayNode[]>([]);
+  const [rpsData, setRpsData] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rpsData, setRpsData] = useState(() =>
-    Array.from({ length: 31 }, () => 1200 + Math.floor(Math.random() * 400))
-  );
   const [wsConnected, setWsConnected] = useState(true);
-  const logIdRef = useRef(100);
 
   async function loadSnapshot(cancelled = false) {
     try {
-      const snapshot = await fetchControlPlaneSnapshot();
+      const [snapshot, metrics] = await Promise.all([
+        fetchControlPlaneSnapshot(),
+        fetchMetrics(),
+      ]);
+      
       if (cancelled) {
         return;
       }
-      setOverview(snapshot.overview);
+      
+      setLogs(snapshot.overview.recentLogs || []);
       setRoutes(snapshot.routes);
       setPolicies(snapshot.policies);
       setUsers(snapshot.users);
-      setNodes(snapshot.nodes);
+      setNodes(mergeNodesWithMetrics(snapshot.nodes, metrics));
+
+      const averageCpuFromMetrics = metrics.length > 0
+        ? metrics.reduce((sum, metric) => sum + metric.cpuUsagePercent, 0) / metrics.length
+        : snapshot.overview.averageNodeCpu;
+      setOverview({
+        ...snapshot.overview,
+        averageNodeCpu: averageCpuFromMetrics,
+        onlineNodes: metrics.length > 0 ? metrics.length : snapshot.overview.onlineNodes,
+      });
+      
+      // Extract RPS data from metrics and accumulate it
+      setRpsData((prevRps) => {
+        const latestRps = metrics.reduce((sum, metric) => sum + metric.requestsPerSecond, 0);
+        const newData = [...prevRps, Math.round(latestRps)];
+        // Keep last 100 data points
+        return newData.slice(-100);
+      });
+      
       setError(null);
       setWsConnected(true);
     } catch (loadError) {
@@ -67,9 +133,10 @@ export default function App() {
     let cancelled = false;
 
     void loadSnapshot(cancelled);
+    // Poll every 5 seconds for metrics (faster than the 15 second overview poll)
     const pollId = setInterval(() => {
       void loadSnapshot(cancelled);
-    }, 15000);
+    }, 5000);
 
     return () => {
       cancelled = true;
@@ -84,18 +151,35 @@ export default function App() {
     void loadSnapshot();
   }
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      const now = new Date();
-      const h = String(now.getHours()).padStart(2, "0");
-      const m = String(now.getMinutes()).padStart(2, "0");
-      const s = String(now.getSeconds()).padStart(2, "0");
-      const entry = LOG_POOL[Math.floor(Math.random() * LOG_POOL.length)];
-      setLogs(prev => [...prev.slice(-40), { ...entry, id: logIdRef.current++, time: `${h}:${m}:${s}` }]);
-      setRpsData(prev => [...prev.slice(-30), 1100 + Math.floor(Math.random() * 500)]);
-    }, 1800);
-    return () => clearInterval(id);
-  }, []);
+  async function handleRouteCreate(payload: RouteRequest) {
+    await createRoute(payload);
+    await loadSnapshot();
+  }
+
+  async function handleRouteUpdate(id: number, payload: RouteRequest) {
+    await updateRoute(id, payload);
+    await loadSnapshot();
+  }
+
+  async function handleRouteDelete(id: number) {
+    await deleteRoute(id);
+    await loadSnapshot();
+  }
+
+  async function handlePolicyCreate(payload: PolicyRuleRequest) {
+    await createPolicy(payload);
+    await loadSnapshot();
+  }
+
+  async function handlePolicyUpdate(id: number, payload: PolicyRuleRequest) {
+    await updatePolicy(id, payload);
+    await loadSnapshot();
+  }
+
+  async function handlePolicyDelete(id: number) {
+    await deletePolicy(id);
+    await loadSnapshot();
+  }
 
   return (
     <>
@@ -150,8 +234,22 @@ export default function App() {
             )}
 
             {tab === "overview"  && <OverviewTab logs={logs} rpsData={rpsData} overview={overview} routes={routes} nodes={nodes} />}
-            {tab === "routes"    && <RoutesTab routes={routes} />}
-            {tab === "policies"  && <PoliciesTab policies={policies} />}
+            {tab === "routes"    && (
+              <RoutesTab
+                routes={routes}
+                onCreate={handleRouteCreate}
+                onUpdate={handleRouteUpdate}
+                onDelete={handleRouteDelete}
+              />
+            )}
+            {tab === "policies"  && (
+              <PoliciesTab
+                policies={policies}
+                onCreate={handlePolicyCreate}
+                onUpdate={handlePolicyUpdate}
+                onDelete={handlePolicyDelete}
+              />
+            )}
             {tab === "arch"      && <ArchitectureTab />}
             {tab === "users"     && <UsersTab users={users} />}
 

@@ -170,6 +170,7 @@ export const CSS = `
   .btn-ghost:hover { color: var(--text); border-color: var(--border2); }
   .btn-danger { background: transparent; color: var(--error); border-color: rgba(235,111,146,0.32); }
   .btn-danger:hover { background: rgba(235,111,146,0.10); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .sparkline { width: 60px; height: 20px; }
 
@@ -181,6 +182,17 @@ export const CSS = `
   .progress-fill.accent { background: var(--accent); }
 
   .code-tag { background: var(--surface); border: 1px solid var(--border); padding: 1px 5px; border-radius: 2px; font-size: 10px; color: var(--accent); }
+  .entity-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); background: var(--surface); min-height: 40px; }
+  .field-span-2 { grid-column: span 2; }
+  .field-label { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+  .field-input { width: 100%; border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 10px 12px; font-family: var(--mono); font-size: 11px; border-radius: 0; outline: none; }
+  .field-input:focus { border-color: var(--accent); }
+  .field-input::placeholder { color: var(--muted2); }
+  .form-actions { grid-column: span 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .form-message { grid-column: span 2; font-size: 10px; }
+  .form-message.error { color: var(--error); }
 
   @keyframes slideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   .fade-in { animation: slideIn 0.3s ease; }
@@ -200,4 +212,11 @@ export const CSS = `
   .text-warn { color: var(--warn); }
   .text-accent { color: var(--accent); }
   .mono { font-family: var(--mono); }
+
+  @media (max-width: 980px) {
+    .entity-form { grid-template-columns: 1fr; }
+    .field-span-2, .form-actions, .form-message { grid-column: span 1; }
+    .card-header { gap: 12px; flex-wrap: wrap; }
+    .stat-grid, .section-row, .section-row-3 { grid-template-columns: 1fr; }
+  }
 `;

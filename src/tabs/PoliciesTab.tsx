@@ -1,4 +1,6 @@
-import type { PolicyRule } from "../api/controlPlane";
+import { useMemo, useState } from "react";
+import Toggle from "../components/shared/Toggle";
+import type { PolicyRule, PolicyRuleRequest } from "../api/controlPlane";
 
 const TYPE_COLORS: Record<string, string> = {
   "rate-limit": "var(--accent)",
@@ -11,17 +13,190 @@ const TYPE_COLORS: Record<string, string> = {
 
 interface PoliciesTabProps {
   policies: PolicyRule[];
+  onCreate: (payload: PolicyRuleRequest) => Promise<void>;
+  onUpdate: (id: number, payload: PolicyRuleRequest) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
 }
 
 function getPolicyStatus(policy: PolicyRule) {
   return policy.enabled ? "active" : "inactive";
 }
 
-export default function PoliciesTab({ policies }: PoliciesTabProps) {
+const EMPTY_POLICY_FORM: PolicyRuleRequest = {
+  name: "",
+  scope: "tenant",
+  conditionExpression: "",
+  action: "throttle",
+  priority: 10,
+  enabled: true,
+  routePattern: "",
+};
+
+function mapPolicyToRequest(policy: PolicyRule): PolicyRuleRequest {
+  return {
+    name: policy.name,
+    scope: policy.scope,
+    conditionExpression: policy.conditionExpression,
+    action: policy.action,
+    priority: policy.priority,
+    enabled: policy.enabled,
+    routePattern: policy.routePattern,
+  };
+}
+
+export default function PoliciesTab({ policies, onCreate, onUpdate, onDelete }: PoliciesTabProps) {
   const activePolicies = policies.filter((policy) => policy.enabled);
+  const [showForm, setShowForm] = useState(false);
+  const [editingPolicyId, setEditingPolicyId] = useState<number | null>(null);
+  const [form, setForm] = useState<PolicyRuleRequest>(EMPTY_POLICY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [busyPolicyId, setBusyPolicyId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const sortedPolicies = useMemo(() => [...policies].sort((a, b) => a.priority - b.priority), [policies]);
+
+  function openCreateForm() {
+    setShowForm(true);
+    setEditingPolicyId(null);
+    setForm(EMPTY_POLICY_FORM);
+    setError(null);
+    setNotice(null);
+  }
+
+  function openEditForm(policy: PolicyRule) {
+    setShowForm(true);
+    setEditingPolicyId(policy.id);
+    setForm(mapPolicyToRequest(policy));
+    setError(null);
+    setNotice(null);
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingPolicyId(null);
+    setForm(EMPTY_POLICY_FORM);
+    setError(null);
+  }
+
+  async function submitForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (editingPolicyId === null) {
+        await onCreate(form);
+        setNotice("Policy created and pushed to the control plane.");
+      } else {
+        await onUpdate(editingPolicyId, form);
+        setNotice("Policy updated and pushed to the control plane.");
+      }
+      closeForm();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Failed to save policy.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(policy: PolicyRule) {
+    const confirmed = window.confirm(`Delete policy ${policy.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyPolicyId(policy.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await onDelete(policy.id);
+      setNotice(`Deleted policy ${policy.name}.`);
+      if (editingPolicyId === policy.id) {
+        closeForm();
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete policy.");
+    } finally {
+      setBusyPolicyId(null);
+    }
+  }
+
+  async function handleEnabledToggle(policy: PolicyRule, enabled: boolean) {
+    setBusyPolicyId(policy.id);
+    setError(null);
+    setNotice(null);
+
+    try {
+      await onUpdate(policy.id, {
+        ...mapPolicyToRequest(policy),
+        enabled,
+      });
+      setNotice(`Policy ${policy.name} ${enabled ? "enabled" : "disabled"}.`);
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "Failed to update policy.");
+    } finally {
+      setBusyPolicyId(null);
+    }
+  }
 
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {showForm && (
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">{editingPolicyId === null ? "Create Policy" : "Edit Policy"}</span>
+            <button className="btn btn-ghost" onClick={closeForm}>Close</button>
+          </div>
+          <form className="card-body entity-form" onSubmit={submitForm}>
+            <label className="field">
+              <span className="field-label">Name</span>
+              <input className="field-input" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} required />
+            </label>
+            <label className="field">
+              <span className="field-label">Scope</span>
+              <select className="field-input" value={form.scope} onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value }))}>
+                {["tenant", "auth", "cache", "block", "allowlist", "retry"].map((scope) => <option key={scope} value={scope}>{scope}</option>)}
+              </select>
+            </label>
+            <label className="field field-span-2">
+              <span className="field-label">Route Pattern</span>
+              <input className="field-input" value={form.routePattern} onChange={(event) => setForm((current) => ({ ...current, routePattern: event.target.value }))} required />
+            </label>
+            <label className="field field-span-2">
+              <span className="field-label">Condition</span>
+              <input className="field-input" value={form.conditionExpression} onChange={(event) => setForm((current) => ({ ...current, conditionExpression: event.target.value }))} required />
+            </label>
+            <label className="field field-span-2">
+              <span className="field-label">Action</span>
+              <input className="field-input" value={form.action} onChange={(event) => setForm((current) => ({ ...current, action: event.target.value }))} required />
+            </label>
+            <label className="field">
+              <span className="field-label">Priority</span>
+              <input className="field-input" type="number" min="0" value={form.priority} onChange={(event) => setForm((current) => ({ ...current, priority: Number(event.target.value) }))} required />
+            </label>
+            <label className="field-inline">
+              <span className="field-label">Enabled</span>
+              <Toggle on={form.enabled} onChange={(value) => setForm((current) => ({ ...current, enabled: value }))} />
+            </label>
+            {error && <div className="form-message error">{error}</div>}
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={closeForm} disabled={saving}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : editingPolicyId === null ? "Create Policy" : "Save Policy"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {(notice || error) && !showForm && (
+        <div className="card">
+          <div className="card-body" style={{ color: error ? "var(--error)" : "var(--ok)" }}>
+            {error ?? notice}
+          </div>
+        </div>
+      )}
 
       {/* Summary row */}
       <div className="stat-grid">
@@ -46,7 +221,7 @@ export default function PoliciesTab({ policies }: PoliciesTabProps) {
         </div>
         <div className="stat-card purple">
           <div className="stat-label">Scopes</div>
-          <div className="stat-value" style={{ color: "#A78BFA" }}>
+          <div className="stat-value" style={{ color: "var(--accent3)" }}>
             {new Set(policies.map((policy) => policy.scope)).size}
           </div>
           <div className="stat-sub">targeting dimensions</div>
@@ -58,8 +233,8 @@ export default function PoliciesTab({ policies }: PoliciesTabProps) {
         <div className="card-header">
           <span className="card-title">Policy Registry — Runtime Enforced</span>
           <div className="flex gap-6">
-            <button className="btn btn-ghost">Import Rules</button>
-            <button className="btn btn-primary">+ New Policy</button>
+            <button className="btn btn-ghost" disabled>Import Rules</button>
+            <button className="btn btn-primary" onClick={openCreateForm}>+ New Policy</button>
           </div>
         </div>
         <div style={{ overflowX: "auto" }}>
@@ -78,7 +253,7 @@ export default function PoliciesTab({ policies }: PoliciesTabProps) {
               </tr>
             </thead>
             <tbody>
-              {policies.map(p => (
+              {sortedPolicies.map(p => (
                 <tr key={p.id}>
                   <td style={{ color: "var(--muted)", fontSize: 10, textAlign: "center" }}>#{p.priority}</td>
                   <td style={{ fontSize: 11, fontWeight: 600 }}>{p.name}</td>
@@ -100,12 +275,12 @@ export default function PoliciesTab({ policies }: PoliciesTabProps) {
                     </span>
                   </td>
                   <td>
-                    <div className={`toggle ${p.enabled ? "on" : ""}`} />
+                    <Toggle on={p.enabled} disabled={busyPolicyId === p.id} onChange={(value) => void handleEnabledToggle(p, value)} />
                   </td>
                   <td>
                     <div className="flex gap-6">
-                      <button className="btn btn-ghost" style={{ padding: "3px 8px" }}>Edit</button>
-                      <button className="btn btn-danger" style={{ padding: "3px 8px" }}>✕</button>
+                      <button className="btn btn-ghost" style={{ padding: "3px 8px" }} onClick={() => openEditForm(p)} disabled={busyPolicyId === p.id}>Edit</button>
+                      <button className="btn btn-danger" style={{ padding: "3px 8px" }} onClick={() => void handleDelete(p)} disabled={busyPolicyId === p.id}>{busyPolicyId === p.id ? "..." : "✕"}</button>
                     </div>
                   </td>
                 </tr>
