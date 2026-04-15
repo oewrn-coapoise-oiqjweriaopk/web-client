@@ -35,6 +35,7 @@ const nav = [
   { id: "arch",      label: "Architecture"  },
   { id: "users",     label: "Users & RBAC"  },
 ];
+const METRICS_POLL_INTERVAL_MS = 2000;
 
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) {
@@ -44,25 +45,54 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function formatHeartbeatAge(lastHeartbeatAt: string): string {
+  const ageMs = Date.now() - new Date(lastHeartbeatAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < 0) {
+    return "unknown";
+  }
+  const seconds = Math.floor(ageMs / 1000);
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ago`;
+}
+
 function mergeNodesWithMetrics(nodes: GatewayNode[], metrics: MetricsResponse[]): GatewayNode[] {
   if (metrics.length === 0) {
     return nodes;
   }
 
-  const nodesById = new Map(nodes.map((node) => [node.nodeId, node]));
-  return metrics.map((metric, index) => {
-    const existingNode = nodesById.get(metric.nodeId);
+  const metricsById = new Map(metrics.map((metric) => [metric.nodeId, metric]));
+  const mergedNodes = nodes.map((node) => {
+    const metric = metricsById.get(node.nodeId);
+    if (!metric) {
+      return node;
+    }
+
     return {
-      id: existingNode?.id ?? -(index + 1),
-      nodeId: metric.nodeId,
-      region: existingNode?.region ?? "runtime",
-      status: "ok",
+      ...node,
       cpuUsage: clampPercent(metric.cpuUsagePercent),
-      memoryUsage: existingNode?.memoryUsage ?? 0,
-      activeConnections: existingNode?.activeConnections ?? 0,
       lastHeartbeatAt: new Date(metric.lastUpdated).toISOString(),
     };
   });
+
+  for (const metric of metrics) {
+    if (!mergedNodes.some((node) => node.nodeId === metric.nodeId)) {
+      mergedNodes.push({
+        id: -(mergedNodes.length + 1),
+        nodeId: metric.nodeId,
+        region: "runtime",
+        status: "ok",
+        cpuUsage: clampPercent(metric.cpuUsagePercent),
+        memoryUsage: 0,
+        activeConnections: 0,
+        lastHeartbeatAt: new Date(metric.lastUpdated).toISOString(),
+      });
+    }
+  }
+
+  return mergedNodes;
 }
 
 export default function App() {
@@ -102,13 +132,14 @@ export default function App() {
       setOverview({
         ...snapshot.overview,
         averageNodeCpu: averageCpuFromMetrics,
-        onlineNodes: metrics.length > 0 ? metrics.length : snapshot.overview.onlineNodes,
+        onlineNodes: snapshot.overview.onlineNodes,
       });
       
-      // Extract RPS data from metrics and accumulate it
+      // Extract RPM data from metrics and accumulate it
       setRpsData((prevRps) => {
         const latestRps = metrics.reduce((sum, metric) => sum + metric.requestsPerSecond, 0);
-        const newData = [...prevRps, Math.round(latestRps)];
+        const latestRpm = latestRps * 60;
+        const newData = [...prevRps, Number(latestRpm.toFixed(0))];
         // Keep last 100 data points
         return newData.slice(-100);
       });
@@ -133,10 +164,10 @@ export default function App() {
     let cancelled = false;
 
     void loadSnapshot(cancelled);
-    // Poll every 5 seconds for metrics (faster than the 15 second overview poll)
+    // Poll every 2 seconds for smoother chart updates.
     const pollId = setInterval(() => {
       void loadSnapshot(cancelled);
-    }, 5000);
+    }, METRICS_POLL_INTERVAL_MS);
 
     return () => {
       cancelled = true;
@@ -280,10 +311,14 @@ export default function App() {
                               <div style={{ fontSize: 10, marginTop: 3 }}>{n.memoryUsage}%</div>
                             </div>
                           </div>
-                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>{n.activeConnections.toLocaleString()} connections</div>
+                          <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 8 }}>
+                            {n.activeConnections.toLocaleString()} connections · heartbeat {formatHeartbeatAge(n.lastHeartbeatAt)}
+                          </div>
                         </>
                       ) : (
-                        <div style={{ marginTop: 12, fontSize: 11, color: "var(--error)" }}>NODE UNREACHABLE</div>
+                        <div style={{ marginTop: 12, fontSize: 11, color: "var(--error)" }}>
+                          NODE UNREACHABLE · last heartbeat {formatHeartbeatAge(n.lastHeartbeatAt)}
+                        </div>
                       )}
                     </div>
                   ))}

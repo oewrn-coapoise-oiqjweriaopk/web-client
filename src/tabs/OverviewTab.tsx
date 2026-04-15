@@ -20,6 +20,9 @@ const CHART_BAR_GAP = 1;
 const CHART_SLOT_WIDTH = CHART_BAR_WIDTH + CHART_BAR_GAP;
 const CHART_HEIGHT = 80;
 const CHART_WIDTH = VISIBLE_RPS_BARS * CHART_SLOT_WIDTH - CHART_BAR_GAP;
+const CHART_MIN_SCALE = 25;
+const CHART_HEADROOM_MULTIPLIER = 1.8;
+const CHART_MIN_BAR_HEIGHT = 2;
 
 export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: OverviewTabProps) {
   const logStreamRef = useRef<HTMLDivElement | null>(null);
@@ -31,12 +34,16 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
   );
   const [transitionBars, setTransitionBars] = useState<ChartBar[] | null>(null);
   const [chartSlidePhase, setChartSlidePhase] = useState<"idle" | "primed" | "sliding">("idle");
-  const totalRPS = rpsData[rpsData.length - 1] ?? 0;
+  const totalRPM = rpsData[rpsData.length - 1] ?? 0;
   const healthyNodes = overview?.onlineNodes ?? nodes.filter((node) => node.status === "ok").length;
   const avgCpu = Math.round(overview?.averageNodeCpu ?? 0);
   const totalRoutes = overview?.totalRoutes ?? routes.length;
   const routeAlerts = Math.max(0, totalRoutes - (overview?.healthyRoutes ?? 0));
   const unhealthyNodes = Math.max(0, nodes.length - healthyNodes);
+  const formatRpm = (value: number) => value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
 
   useEffect(() => {
     const logStream = logStreamRef.current;
@@ -72,7 +79,11 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
       chartFrameRef.current = null;
     }
 
-    if (chartBars.length === 0 || nextVisibleValues.length <= 1) {
+    if (
+      chartBars.length === 0
+      || nextVisibleValues.length <= 1
+      || chartBars.length < nextVisibleValues.length
+    ) {
       setChartBars(nextVisibleValues.map((value) => ({ id: nextChartBarIdRef.current++, value })));
       setTransitionBars(null);
       setChartSlidePhase("idle");
@@ -112,9 +123,13 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
   }, []);
 
   const renderedBars = transitionBars ?? chartBars;
-  const chartMax = Math.max(
+  const observedChartMax = Math.max(
     ...renderedBars.map((bar) => bar.value),
     1,
+  );
+  const chartMax = Math.max(
+    CHART_MIN_SCALE,
+    observedChartMax * CHART_HEADROOM_MULTIPLIER,
   );
 
   return (
@@ -122,8 +137,8 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
       {/* KPI row */}
       <div className="stat-grid">
         <div className="stat-card accent">
-          <div className="stat-label">Total RPS</div>
-          <div className="stat-value" style={{ color: "var(--accent)" }}>{totalRPS.toLocaleString()}</div>
+          <div className="stat-label">Total RPM</div>
+          <div className="stat-value" style={{ color: "var(--accent)" }}>{formatRpm(totalRPM)}</div>
           <div className="stat-delta up">▲ 8.2% vs 1h ago</div>
         </div>
         <div className="stat-card ok">
@@ -149,8 +164,8 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
       <div className="section-row">
         <div className="card">
           <div className="card-header">
-            <span className="card-title">Request Volume — 30s window</span>
-            <span className="text-muted">{rpsData[rpsData.length-1]} RPS</span>
+            <span className="card-title">Request Volume — RPM</span>
+            <span className="text-muted">{formatRpm(totalRPM)} RPM</span>
           </div>
           <div className="card-body">
             <div className="bar-window">
@@ -169,7 +184,10 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
                   }}
                 >
                   {renderedBars.map((bar, i) => {
-                    const barHeight = Math.max(8, (bar.value / chartMax) * CHART_HEIGHT);
+                    const barHeight = Math.max(
+                      CHART_MIN_BAR_HEIGHT,
+                      (Math.max(bar.value, 0) / chartMax) * CHART_HEIGHT,
+                    );
                     const x = i * CHART_SLOT_WIDTH;
                     const y = CHART_HEIGHT - barHeight;
                     const isLatestStableBar = chartSlidePhase === "idle" && i === renderedBars.length - 1;
@@ -196,7 +214,7 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
         <div className="card">
           <div className="card-header">
             <span className="card-title">Node Mesh</span>
-            <span className="text-muted">{healthyNodes} healthy</span>
+            <span className="text-muted">{healthyNodes} healthy (heartbeat)</span>
           </div>
           <div className="card-body">
             <div className="node-grid">
