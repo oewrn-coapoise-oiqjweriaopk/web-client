@@ -136,14 +136,16 @@ export const CSS = `
   .section-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .section-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
 
-  .log-stream { font-size: 10px; line-height: 1.7; height: 280px; overflow-y: auto; }
-  .log-line { display: flex; gap: 10px; padding: 1px 0; }
+  .log-stream { font-size: 10px; line-height: 1.7; height: 280px; overflow-y: auto; overscroll-behavior: contain; }
+  .log-line { display: flex; gap: 10px; padding: 1px 0; min-width: 0; }
+  .log-line-failure { background: color-mix(in srgb, var(--error) 10%, transparent); }
   .log-time { color: var(--muted2); flex-shrink: 0; }
   .log-level { flex-shrink: 0; width: 42px; }
   .log-level.INFO  { color: var(--accent); }
   .log-level.WARN  { color: var(--warn); }
   .log-level.ERROR { color: var(--error); }
-  .log-msg  { color: var(--text); opacity: 0.8; }
+  .log-msg  { color: var(--text); opacity: 0.8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-msg-verbose { opacity: 1; color: color-mix(in srgb, var(--text) 88%, var(--error) 12%); }
   .log-new { animation: logFade 0.4s ease; }
   @keyframes logFade { from { background: rgba(196,167,231,0.10); } to { background: transparent; } }
 

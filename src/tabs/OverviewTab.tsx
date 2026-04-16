@@ -40,10 +40,27 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
   const totalRoutes = overview?.totalRoutes ?? routes.length;
   const routeAlerts = Math.max(0, totalRoutes - (overview?.healthyRoutes ?? 0));
   const unhealthyNodes = Math.max(0, nodes.length - healthyNodes);
+  const visibleLogs = [...logs]
+    .sort((left, right) => {
+      const leftTs = left.timestamp ? new Date(left.timestamp).getTime() : 0;
+      const rightTs = right.timestamp ? new Date(right.timestamp).getTime() : 0;
+      return leftTs - rightTs;
+    })
+    .slice(-14);
   const formatRpm = (value: number) => value.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
+  const isFailureLog = (statusCode?: number, level?: string) =>
+    (typeof statusCode === "number" && statusCode >= 400) || level === "WARN" || level === "ERROR";
+  const formatFailureLog = (log: LogEntry) => {
+    const method = log.method ?? "REQ";
+    const path = log.path ?? "unknown-path";
+    const status = log.statusCode ?? "n/a";
+    const latency = typeof log.responseTimeMs === "number" ? `${log.responseTimeMs}ms` : "n/a";
+    const detail = log.error?.trim() || log.message;
+    return `${method} ${path} -> ${status} (${latency}) | ${detail}`;
+  };
 
   useEffect(() => {
     const logStream = logStreamRef.current;
@@ -249,7 +266,7 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
         </div>
         <div className="card-body">
           <div ref={logStreamRef} className="log-stream">
-            {logs.slice(-14).map((l, i) => {
+            {visibleLogs.map((l, i) => {
               // Format timestamp from ISO string
               const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('en-US', { 
                 hour12: false, 
@@ -257,12 +274,17 @@ export default function OverviewTab({ logs, rpsData, overview, routes, nodes }: 
                 minute: '2-digit', 
                 second: '2-digit' 
               }) : '';
+              const failed = isFailureLog(l.statusCode, l.level);
+              const lineText = failed ? formatFailureLog(l) : l.message;
               
               return (
-                <div key={l.id} className={`log-line ${i === logs.slice(-14).length - 1 ? "log-new" : ""}`}>
+                <div
+                  key={l.id}
+                  className={`log-line ${failed ? "log-line-failure" : ""} ${i === visibleLogs.length - 1 ? "log-new" : ""}`}
+                >
                   <span className="log-time">{time}</span>
                   <span className={`log-level ${l.level.toLowerCase()}`}>{l.level}</span>
-                  <span className="log-msg">{l.message}</span>
+                  <span className={`log-msg ${failed ? "log-msg-verbose" : ""}`} title={lineText}>{lineText}</span>
                 </div>
               );
             })}
