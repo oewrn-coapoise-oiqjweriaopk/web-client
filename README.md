@@ -31,6 +31,24 @@ The UI polls these endpoints from the control plane:
 - `GET /api/v1/users`
 - `GET /api/v1/nodes`
 
+## Deploy to GitHub Pages
+
+This repo includes a workflow at:
+
+```text
+.github/workflows/deploy-pages.yml
+```
+
+It deploys on every push to `main` (or manual run via **workflow_dispatch**).
+
+The workflow builds with:
+
+```text
+VITE_BASE_PATH=/<repository-name>/
+```
+
+so static assets resolve correctly on GitHub Pages project URLs.
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
