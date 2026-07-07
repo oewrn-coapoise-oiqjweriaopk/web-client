@@ -1,126 +1,29 @@
-# Gateway Control Plane Web
+# OpenGW Project
 
-Frontend for the API gateway control plane.
+OpenGW Project is a small, public gateway-control-plane project made up of two repositories:
 
-## Development
+- [web-client](https://github.com/opengw-project/web-client) — the TypeScript/Vite frontend for the API gateway control plane
+- [control-plane](https://github.com/opengw-project/control-plane) — the Java/Spring Boot backend that serves gateway administration APIs
 
-Point the app at the Spring Boot backend:
+## What this project is about
 
-```bash
-cp .env.example .env
-```
+This organization appears to be building an API gateway control plane with a browser-based UI and a Spring Boot service behind it. The frontend talks to the control plane for overview data, routes, policies, users, and nodes, while the backend stores system-of-record data in PostgreSQL and projects runtime configuration into Redis for low-latency access.
 
-Default value:
+## Public repositories
 
-```bash
-VITE_CONTROL_PLANE_BASE_URL=http://localhost:8081
-```
+| Repository | Description | Primary language | URL |
+| --- | --- | --- | --- |
+| [web-client](https://github.com/opengw-project/web-client) | Frontend for the API gateway control plane. Built with React, TypeScript, and Vite. | TypeScript | https://github.com/opengw-project/web-client |
+| [control-plane](https://github.com/opengw-project/control-plane) | Spring Boot backend for the API gateway control plane. Exposes admin APIs for routes, policies, API keys, nodes, and users. | Java | https://github.com/opengw-project/control-plane |
 
-Then run:
+## Important note
 
-```bash
-npm install
-npm run dev
-```
+This project is heavily vibecoded. Expect rapid iteration, rough edges, and code that may favor momentum over polish. Treat it as a work in progress.
 
-The UI polls these endpoints from the control plane:
+## Summary
 
-- `GET /api/v1/overview`
-- `GET /api/v1/routes`
-- `GET /api/v1/policies`
-- `GET /api/v1/users`
-- `GET /api/v1/nodes`
+If you want to understand the system quickly:
 
-## Deploy to GitHub Pages
-
-This repo includes a workflow at:
-
-```text
-.github/workflows/deploy-pages.yml
-```
-
-It deploys on every push to `main` (or manual run via **workflow_dispatch**).
-
-The workflow builds with:
-
-```text
-VITE_BASE_PATH=/<repository-name>/
-```
-
-so static assets resolve correctly on GitHub Pages project URLs.
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+1. Start with `control-plane` to see the backend API surface and data flow.
+2. Then open `web-client` to see how the UI consumes those APIs.
+3. Expect the repository layout and implementation style to evolve quickly.
